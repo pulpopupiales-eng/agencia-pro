@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, request, redirect
-import sqlite3, os
+import sqlite3, os, requests
+from urllib.parse import quote
 
 app = Flask(__name__)
 DB_PATH = 'agencia.db'
@@ -9,6 +10,20 @@ def init_db():
     con.execute('CREATE TABLE IF NOT EXISTS modelos (id INTEGER PRIMARY KEY, nombre TEXT, seguidores TEXT, ciudad TEXT)')
     con.close()
 init_db()
+
+def enviar_whatsapp(nombre, seguidores, ciudad):
+    phone = os.environ.get("PHONE") # ej: 593987654321 sin +
+    apikey = os.environ.get("APIKEY") # ej: 1234567
+    if not phone or not apikey:
+        print("No hay PHONE o APIKEY configurado en Render")
+        return
+    mensaje = f"🚨 NUEVA MODELO EN AGENCIA PRO: {nombre} - {seguidores} seguidores - {ciudad}"
+    try:
+        url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={quote(mensaje)}&apikey={apikey}"
+        requests.get(url, timeout=10)
+        print("WhatsApp enviado!")
+    except Exception as e:
+        print(f"Error whatsapp: {e}")
 
 html = """
 <!DOCTYPE html>
@@ -67,10 +82,17 @@ def i():
 
 @app.route('/add',methods=['POST'])
 def a():
+    nombre = request.form['nombre']
+    seguidores = request.form['seguidores']
+    ciudad = request.form['ciudad']
     con=sqlite3.connect(DB_PATH)
-    con.execute('INSERT INTO modelos (nombre,seguidores,ciudad) VALUES (?,?,?)',(request.form['nombre'],request.form['seguidores'],request.form['ciudad']))
+    con.execute('INSERT INTO modelos (nombre,seguidores,ciudad) VALUES (?,?,?)',(nombre,seguidores,ciudad))
     con.commit()
     con.close()
+
+    # AQUÍ ENVÍA AL WHATSAPP
+    enviar_whatsapp(nombre, seguidores, ciudad)
+
     return redirect('/')
 
 @app.route('/del/<int:id>')
